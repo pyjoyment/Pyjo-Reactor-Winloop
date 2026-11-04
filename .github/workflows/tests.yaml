@@ -93,10 +93,12 @@ jobs:
         with:
           version: 0.13.6 # datasource=github-releases depName=astral-sh/uv
 
+      # The interpreter of setup-python by its path of Windows, as the one of Git
+      # Bash, from command -v, is a path of MSYS without .exe
       - name: Install
         working-directory: Pyjo-Reactor-Winloop
         shell: bash
-        run: uv sync --python "$(command -v python)"
+        run: uv sync --python "$(python -c 'import sys; print(sys.executable)')"
 
       # As in Pyjoyment: invalid escape sequences and deprecated APIs fail, and
       # the ResourceWarning of the development mode of Python, which only goes

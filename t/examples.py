@@ -44,13 +44,20 @@ with subtest('hello_world_winloop.py'), tempfile.TemporaryDirectory() as dir:
     with open(script, 'w') as file:
         file.write(source.replace('3000', str(port)))
 
-    process = subprocess.Popen([sys.executable, script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    # Windows has no INT of another process: Ctrl-Break of a group of processes of its own stops the server, as QUIT
+    process = subprocess.Popen(
+        [sys.executable, script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0,
+    )
     try:
         status, body = get(port, time.monotonic() + 30)
         is_ok(status, 200, 'right status')
         is_ok(body, b'Your Pyjo is working!', 'right content')
     finally:
-        process.send_signal(signal.SIGINT)
+        process.send_signal(signal.CTRL_BREAK_EVENT if sys.platform == 'win32' else signal.SIGINT)
         try:
             process.wait(10)
         except subprocess.TimeoutExpired:
@@ -58,8 +65,20 @@ with subtest('hello_world_winloop.py'), tempfile.TemporaryDirectory() as dir:
             process.wait()
         output = process.stdout.read()
         process.stdout.close()
-    is_ok(process.returncode, 0, 'stopped by INT')
+    is_ok(process.returncode, 0, 'stopped by Ctrl-Break')
     like_ok(output, rf'Web application available at http://127\.0\.0\.1:{port}', 'listening')
+
+with subtest('asyncio_winloop.py'):
+    result = subprocess.run(
+        [sys.executable, os.path.join(EXAMPLES, 'asyncio_winloop.py')], capture_output=True, text=True, timeout=60
+    )
+    is_ok(
+        result.stdout,
+        'asyncio: HTTP/1.1 200 OK\nPyjo.UserAgent: 200 Your Pyjo is working!\nloop: winloop\n',
+        'the streams of asyncio and the user agent of Pyjoyment on the loop of Winloop',
+    )
+    is_ok(result.stderr, '', 'nothing on the standard error')
+    is_ok(result.returncode, 0, 'the server and the user agent closed at the end')
 
 # As the workflow Build runs it with the wheel: its server listens on a port that the system picks, so it needs no free
 # port of the tests

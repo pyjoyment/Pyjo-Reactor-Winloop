@@ -13,7 +13,7 @@ import tomllib
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 # The module is imported from the environment of uv sync, where the project is installed in editable mode, with
-# Pyjoyment and Winloop, which it imports
+# Pyjoyment, which it imports
 with open(os.path.join(ROOT, 'pyproject.toml'), 'rb') as f:
     PROJECT = tomllib.load(f)['project']
 
@@ -23,6 +23,10 @@ copyright = f'2026, {author}'
 version = release = PROJECT['version']
 
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinx.ext.linkcode']
+
+# Winloop is installed on Windows only, and Read the Docs and the workflow Docs build on Linux: autodoc imports the
+# module with a mock of it, whose Loop the private loop of the module subclasses
+autodoc_mock_imports = ['winloop']
 
 # The documentation of Pyjoyment of the same version of Read the Docs as this one, stable for stable, and latest for
 # the others, as a tag or a pull request of this project is no version of Pyjoyment

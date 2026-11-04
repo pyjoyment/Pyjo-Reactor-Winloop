@@ -13,23 +13,80 @@ Pyjo-Reactor-Uvloop, whose workflows and linters it shares, and whose
 
 ## How it works
 
-The reactor is not implemented yet: the module is the stub of the template,
-whose constructor raises `NotImplementedError`, so that nothing falls back to
-the loop of asyncio in the meantime. What it is to be:
-
-- `Pyjo.Reactor.Uvloop` for Winloop: a subclass of `Pyjo.Reactor.Asyncio`
-  that overrides `_own_loop` with a loop of Winloop, `winloop.Loop` or a
-  subclass of it, in the place of `asyncio.new_event_loop()`.
-- `_Loop` of `Pyjo.Reactor.Uvloop` works around the libuv and the uvloop that
-  Winloop has too: the wakeup fd of the signals, the hook of the finalizer of
-  an async generator in the debug mode, the poll after `stop`, the blocking
-  mode of a handle and the error of a handle. Each of them is to be checked on
-  Winloop, which is libuv on Windows, with its IOCP, and taken, changed or
-  left out, as found, and written down here; the fork and `POLLERR` of Linux
-  do not apply.
+- It is `Pyjo.Reactor.Uvloop` for Winloop: a subclass of
+  `Pyjo.Reactor.Asyncio`, as the loop of Winloop is a loop of asyncio, which
+  overrides `_own_loop`, the loop that the reactor makes for itself: a
+  subclass of `winloop.Loop` in the place of the `asyncio.SelectorEventLoop`
+  that `Pyjo.Reactor.Asyncio` makes on Windows. The rest of what the reactor
+  does with a loop of its own, which `_own_loop` repeats, the set of the loops
+  that are closed at the exit of the interpreter, the finalizer that closes
+  the loop with the reactor and its handler of `atexit`, are private members
+  of `Pyjo.Reactor.Asyncio`, so a change of them in Pyjoyment breaks the
+  reactor: the suite of Pyjoyment, which CI runs on the reactor, is what
+  guards them.
 - What the reactor is for is the servers of Pyjoyment, `daemon` and
   `prethread`, as Windows has no fork for `prefork`, and its blocking user
-  agent, where no loop runs and the reactor makes one.
+  agent, where no loop runs and the reactor makes one. libuv of Windows polls
+  sockets only, with `uv_poll_init_socket` and the AFD of the I/O completion
+  port, as `select` of Windows does, without its limit of 512 sockets; a pipe
+  or a file cannot be watched, and `Pyjo.IOLoop.Stdio` is not available on
+  Windows anyway.
+- `_Loop` of `Pyjo.Reactor.Uvloop` works around five things of libuv and
+  uvloop, which Winloop shares. They were checked in the sources of Winloop
+  0.8.2 and of the libuv that it pins, 1.53, `src/win/core.c` and
+  `src/win/poll.c`; two are taken, three are left out:
+  - The hook of the finalizer of an async generator, taken: in the debug mode
+    of asyncio, which CI runs with `PYTHONDEVMODE=1`, a handle of Winloop
+    takes the stack where it is made, with `Sys_GetFrame` of its C, which is
+    `PyThreadState_GetFrame`, the frame that `sys._getframe` of uvloop reads.
+    The hook of Winloop, `_asyncgen_finalizer_hook`, of Cython, makes a handle
+    with `call_soon_threadsafe` while CPython clears the frame of another
+    async generator, as `head` of `Pyjo.Iterator` does, which crashed uvloop
+    (MagicStack/uvloop#756). `_Loop` overrides the hook in Python, which the
+    stack starts from then, as the hook of asyncio does, until a fix of it is
+    released in Winloop.
+  - The halt of the readers and the writers after `stop`, taken: `uv_run` of
+    Windows processes the completions of its port, which are the callbacks of
+    the readers and the writers, after its poll, and the next iteration runs
+    the idle handle, where Winloop calls `uv_stop`, and polls once more, with
+    no wait, before it ends. An event of the reactor that stops it, or ends
+    `one_tick`, would be followed by the same events, as with uvloop on POSIX.
+    `stop` of `_Loop` schedules a callback, which the idle handle runs before
+    that poll, and which halts the readers and the writers until the end of
+    the run. libuv submits the poll of a socket again after its callback, so a
+    socket that is ready is ready in the next run still. A completion that is
+    left over after the eight rounds of the processing of the iteration that
+    stops runs before the idle handle, which is not halted.
+  - The relay of the wakeup fd of the signals, left out: Winloop sets a socket
+    of its own as the wakeup fd in `run_forever`, in the main thread, as
+    uvloop does, but nothing of Pyjoyment on Windows waits for the wakeup fd
+    of its own with the reactor while it runs. The worker of
+    `Pyjo.Server.Prefork` that needed it does not exist on Windows; the
+    manager of `Pyjo.Server.Prethread` waits for it with `select.select`,
+    where no loop runs; its workers run the reactor in threads, where Winloop
+    sets no wakeup fd; and the handler of `Pyjo.Server.Daemon` stops the loop
+    itself, after Winloop, woken by its own socket, calls
+    `PyErr_CheckSignals`. The relay of uvloop writes with `os.write` too, and
+    the wakeup fd of Windows is a socket, which needs `send`.
+  - The blocking mode of a handle, left out: `uv_poll_init_socket` sets a
+    socket to the non-blocking mode, but the mode of a socket of Windows
+    cannot be read, as `os.get_blocking` takes a descriptor of the C runtime
+    and not a socket, and the terminal of `Pyjo.IOLoop.Stdio`, for which
+    uvloop needed it, is not watched on Windows. The sockets of Pyjoyment are
+    non-blocking. A `socket.socket` that is blocking, and that the reactor
+    watches, raises `BlockingIOError` after it, where the loop of asyncio
+    leaves it blocking; `sock.getblocking()` and `sock.setblocking(True)`
+    after `add_reader` and `add_writer` would set it back, if a test shows
+    the need.
+  - The watch again after an error of a handle, left out: libuv of Windows
+    reports the reset of a socket and the close of its peer as events of AFD,
+    `AFD_POLL_ABORT` and `AFD_POLL_DISCONNECT`, which are readable, and keeps
+    watching the socket, so its callbacks are called for as long as the
+    error lasts, as with the loop of asyncio. It stops watching only on an
+    error of the poll itself, as of a socket that is closed, and `select.poll`,
+    with which uvloop checks `POLLERR` on Linux, does not exist on Windows.
+- `PYJO_ASYNCIO_SLOW_CALLBACK` sets the `slow_callback_duration` of a loop of
+  its own, as for `Pyjo.Reactor.Asyncio`, which the loop of Winloop has too.
 - Winloop has wheels for CPython on Windows only, with the free-threaded
   build, not for PyPy, so the matrix of Tests is CPython 3.12 to 3.15 and
   3.15t on `windows-2025`.
@@ -114,14 +171,22 @@ Biome in `.trunk/trunk.yaml` is the one of Pyjoyment, which explains why it is
 not the one of the plugin of Trunk.
 
 Its pyright needs the environment of `uv sync`, `.venv`, which `tool.pyright` of
-`pyproject.toml` names, as the reactor imports Pyjoyment and Winloop, while
-Pyjoyment has no dependencies to find; Trunk Check of CI runs `uv sync` first.
+`pyproject.toml` names, as the reactor imports Pyjoyment, while Pyjoyment has
+no dependencies to find; Trunk Check of CI runs `uv sync` first. Winloop is
+not in that environment on Linux and macOS, so pyright takes the stub of
+`typings/winloop`, the default `stubPath`, which has what the module uses of
+Winloop, with the methods of asyncio that typeshed has abstract in
+`asyncio.AbstractEventLoop` and `winloop.Loop` implements; the stub is taken on
+Windows too, where it hides the types of Winloop itself. The import of Winloop
+ignores `reportMissingModuleSource`, which pyright reports where only the stub
+is found.
 The examples and the tests, and `docs/conf.py`, are not checked by pyright: for them it takes the
 regular package `Pyjo` of Pyjoyment, which hides `Pyjo.Reactor.Winloop` of the
 checkout.
 
 The documentation is one page, `docs/index.rst`: the docstrings of the
-module, which autodoc imports, and the examples from `examples/`, included,
+module, which autodoc imports, with a mock of Winloop, `autodoc_mock_imports`
+of `docs/conf.py`, as Read the Docs and the workflow Docs build on Linux, and the examples from `examples/`, included,
 never copied, as in Pyjoyment. Read the Docs installs it with `uv sync` of `uv.lock` and the
 group `docs`, not with pip and a `docs/requirements.txt` as Pyjoyment does,
 so that it builds with the versions of the lock, as the workflow Docs does.
@@ -136,9 +201,19 @@ Pyjoyment of `uv.lock`:
 mise exec -- uv run --group docs --with-editable ../Pyjoyment sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
-`t/Reactor_Winloop.py` is to be `t/Reactor_Uvloop.py` of Pyjo-Reactor-Uvloop,
-`t/Pyjo/Reactor_Asyncio.py` of Pyjoyment with subtests of its own, for the
-loop of Winloop; it is a stub of the template now.
+`t/Reactor_Winloop.py` is `t/Reactor_Uvloop.py` of Pyjo-Reactor-Uvloop,
+`t/Pyjo/Reactor_Asyncio.py` of Pyjoyment with subtests of its own for the
+loop of Winloop: a loop of its own, a given loop, a loop that is running, of
+asyncio, a `SelectorEventLoop`, and of Winloop, a coroutine,
+`PYJO_ASYNCIO_SLOW_CALLBACK`, a signal while the loop waits, the finalizer of
+an async generator in the debug mode, a stop in a callback of I/O and the
+writer of a socket whose peer has closed it. The subtests of Uvloop for the
+fork, the wakeup fd of a program and the blocking mode of a pipe are left out,
+as they do not apply on Windows.
+`t/examples.py` stops the server of `examples/hello_world_winloop.py` with
+Ctrl-Break, `CTRL_BREAK_EVENT` to a group of processes of its own, as
+`t/lib/ServerProcess.py` of Pyjoyment does, as Windows cannot send INT to
+another process.
 `t/docs/Reactor_Winloop.py` runs the synopsis of the module, in both forms, as
 `t/docs` of Pyjoyment does.
 

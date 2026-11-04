@@ -56,17 +56,18 @@ jobs:
       # nothing comes from it, with the Pyjoyment of PyPI that it depends on.
       # The first line of the example is the class of the reactor and whether
       # its loop is one of Winloop, so that Pyjo.Reactor.Asyncio or a loop of asyncio
-      # in their place fails the step.
+      # in their place fails the step. Python of Windows ends its lines with
+      # CRLF, which diff leaves out.
       - name: Install and run the wheel
         shell: bash
         run: |-
-          uv venv --python "$(command -v python)" "$RUNNER_TEMP/venv"
+          uv venv --python "$(python -c 'import sys; print(sys.executable)')" "$RUNNER_TEMP/venv"
           uv pip install --python "$RUNNER_TEMP/venv/Scripts/python" dist/*.whl
           cp examples/loopback_winloop.py "$RUNNER_TEMP/"
           cd "$RUNNER_TEMP"
           venv/Scripts/python -c 'import Pyjo.Reactor.Winloop; print(Pyjo.Reactor.Winloop.__version__)'
           venv/Scripts/python loopback_winloop.py | tee loopback.txt
-          diff - loopback.txt <<'EOF'
+          diff --strip-trailing-cr - loopback.txt <<'EOF'
           Pyjo_Reactor_Winloop winloop
           200 Your Pyjo is working!
           EOF

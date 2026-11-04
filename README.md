@@ -24,8 +24,6 @@ Pyjoyment, `daemon` and `prethread`, and the blocking requests of its user
 agent run on Winloop, with coroutines, tasks and the libraries of asyncio
 along with them.
 
-The reactor is not implemented yet: this is the template of the distribution.
-
 ## Installation
 
 From [PyPI](https://pypi.org/project/Pyjo-Reactor-Winloop/), with
@@ -51,18 +49,26 @@ pip install git+https://github.com/pyjoyment/Pyjo-Reactor-Winloop
 
 ## Usage
 
-Select the reactor with `PYJO_REACTOR` before `Pyjo.IOLoop` is loaded:
+Select the reactor with `PYJO_REACTOR` before `Pyjo.IOLoop` is loaded, in
+PowerShell:
+
+```powershell
+$env:PYJO_REACTOR = 'Pyjo.Reactor.Winloop'
+python myapp.py daemon
+python myapp.py prethread
+```
+
+or in Git Bash:
 
 ```sh
 PYJO_REACTOR=Pyjo.Reactor.Winloop python myapp.py daemon
-PYJO_REACTOR=Pyjo.Reactor.Winloop python myapp.py prethread
 ```
 
 ## Examples
 
 `examples/hello_world_winloop.py` runs `Pyjo.HelloWorld` on the server of
-Pyjoyment on Winloop until the signal `INT` or `TERM`, in a `with` block,
-which closes the listen sockets of the server at its end:
+Pyjoyment on Winloop until Ctrl-C or Ctrl-Break, in a `with` block, which
+closes the listen sockets of the server at its end:
 
 ```python
 import os
@@ -75,7 +81,7 @@ import Pyjo.HelloWorld  # noqa: E402
 import Pyjo.Server.Daemon  # noqa: E402
 
 
-# The server of Pyjoyment on Winloop, until the signal INT or TERM, which closes its listen sockets at the end of the block
+# The server of Pyjoyment on Winloop, until Ctrl-C or Ctrl-Break, which closes its listen sockets at the end of the block
 with Pyjo.Server.Daemon.new(app=Pyjo.HelloWorld.new(), listen=['http://*:3000']) as daemon:
     daemon.run()
 ```
@@ -88,6 +94,62 @@ Web application available at http://127.0.0.1:3000
 ```console
 $ curl http://127.0.0.1:3000/
 Your Pyjo is working!
+```
+
+`examples/asyncio_winloop.py` is a coroutine on the loop of Winloop, which
+requests the server of Pyjoyment in the same loop with the streams of asyncio
+and with the user agent of Pyjoyment, as the libraries of asyncio run along
+with the reactor:
+
+```python
+import os
+
+
+# The reactor of Pyjoyment on Winloop, selected before Pyjo.IOLoop is loaded
+os.environ['PYJO_REACTOR'] = 'Pyjo.Reactor.Winloop'
+
+import Pyjo.HelloWorld  # noqa: E402
+import Pyjo.IOLoop  # noqa: E402
+import Pyjo.Server.Daemon  # noqa: E402
+import Pyjo.UserAgent  # noqa: E402
+
+import asyncio  # noqa: E402
+
+import winloop  # noqa: E402
+
+
+# A coroutine on the loop of Winloop, with the streams of asyncio and the user agent of Pyjoyment, both requesting the
+# server of Pyjoyment in the same loop
+async def main(port):
+    reader, writer = await asyncio.open_connection('127.0.0.1', port)
+    writer.write(b'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n')
+    print(f'asyncio: {(await reader.readline()).decode().strip()}')
+    writer.close()
+    await writer.wait_closed()
+
+    with Pyjo.UserAgent.new() as ua:
+        tx = await ua.get_p(f'http://127.0.0.1:{port}/')
+        print(f'Pyjo.UserAgent: {tx.res.code} {tx.res.text}')
+
+    return 'winloop' if isinstance(asyncio.get_running_loop(), winloop.Loop) else 'asyncio'
+
+
+# The server, on a port that the system picks, which closes its listen sockets at the end of the block
+with Pyjo.Server.Daemon.new(app=Pyjo.HelloWorld.new(), listen=['http://127.0.0.1'], silent=True) as daemon:
+    port = daemon.start().ports()[0]
+    Pyjo.IOLoop.singleton.reactor.run_coroutine(
+        main(port),
+        lambda loop: (print(f'loop: {loop}'), Pyjo.IOLoop.stop()),
+        lambda err: (print(f'error: {err}'), Pyjo.IOLoop.stop()),
+    )
+    Pyjo.IOLoop.start()
+```
+
+```console
+$ python examples/asyncio_winloop.py
+asyncio: HTTP/1.1 200 OK
+Pyjo.UserAgent: 200 Your Pyjo is working!
+loop: winloop
 ```
 
 `examples/loopback_winloop.py` is a server of Pyjoyment and its user agent on
