@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |-
           uv venv --python "$(python -c 'import sys; print(sys.executable)')" "$RUNNER_TEMP/venv"
-          uv pip install --python "$RUNNER_TEMP/venv/Scripts/python" dist/*.whl
+          uv pip install --python "$RUNNER_TEMP/venv" dist/*.whl
           cp examples/loopback_winloop.py "$RUNNER_TEMP/"
           cd "$RUNNER_TEMP"
           venv/Scripts/python -c 'import Pyjo.Reactor.Winloop; print(Pyjo.Reactor.Winloop.__version__)'
