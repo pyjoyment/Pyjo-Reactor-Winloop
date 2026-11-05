@@ -11,7 +11,7 @@ license = "Artistic-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Piotr Roszatycki", email = "piotr.roszatycki@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = ["Pyjoyment>=0.2.0", "winloop>=0.8.2; sys_platform == 'win32'"]
+dependencies = ["Pyjoyment>=0.3.0", "winloop>=0.8.2; sys_platform == 'win32'"]
 keywords = ["pyjoyment", "reactor", "winloop", "asyncio", "windows"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
@@ -34,11 +34,6 @@ docs = ["sphinx>=9.2.0"]
 # of the distribution, which a new Sphinx may not support, as Sphinx 9.2 does not support 3.12
 [tool.uv.dependency-groups]
 docs = { requires-python = ">=3.14" }
-
-# Until the release of Pyjoyment after 0.2.0: its tests that recognize a subclass of Pyjo.Reactor.Asyncio, as this reactor
-# is (pyjoyment/Pyjoyment#510), and the finalizers deferred below the frames of this reactor (pyjoyment/Pyjoyment#534)
-[tool.uv.sources]
-pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", branch = "main" }
 
 # Only the module: the packages Pyjo and Pyjo.Reactor are those of Pyjoyment, whose namespace extend_path keeps open
 [tool.hatch.build.targets.wheel]

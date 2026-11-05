@@ -142,13 +142,12 @@ is not released yet would be its Git repository in `[tool.uv.sources]` of
 `pyproject.toml`, until its release, and not a path to the checkout next to
 this one: uv applies the sources of a dependency of Git, so whoever installs
 the reactor from Git would get a subdirectory of this repository that does not
-exist. That is the Pyjoyment of `main` now, for its tests that recognize a
-subclass of `Pyjo.Reactor.Asyncio`, pyjoyment/Pyjoyment#510, and for the
-finalizers deferred below the frames of the reactor, pyjoyment/Pyjoyment#534:
-before a release
-of the reactor, the source goes and the lowest version of `dependencies`
-becomes the release of Pyjoyment that has it, as a wheel carries no sources of
-uv and would install Pyjoyment 0.2.0.
+exist. Before a release of the reactor, the source goes and the lowest version
+of `dependencies` becomes the release of Pyjoyment that has the change, as a
+wheel carries no sources of uv and would install the older release. That is
+Pyjoyment 0.3.0 now, the first with the tests that recognize a subclass of
+`Pyjo.Reactor.Asyncio`, pyjoyment/Pyjoyment#510, and the finalizers deferred
+below the frames of the reactor, pyjoyment/Pyjoyment#534.
 The tests lay the checkout next to this one over it with `--with-editable`,
 so that they test what is there:
 Winloop is installed on Windows only, `sys_platform == 'win32'` of
