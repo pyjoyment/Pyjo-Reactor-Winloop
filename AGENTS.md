@@ -87,6 +87,21 @@ Pyjo-Reactor-Uvloop, whose workflows and linters it shares, and whose
     with which uvloop checks `POLLERR` on Linux, does not exist on Windows.
 - `PYJO_ASYNCIO_SLOW_CALLBACK` sets the `slow_callback_duration` of a loop of
   its own, as for `Pyjo.Reactor.Asyncio`, which the loop of Winloop has too.
+- `Pyjo.Reactor._finalize` defers the cleanup of a finalizer that runs below a
+  frame of a reactor or of its event loop, since pyjoyment/Pyjoyment#534,
+  which takes the file of the module of the class of the reactor,
+  `Pyjo/Reactor/Winloop.py` with `_Loop`, wherever it is installed, and the
+  modules of `event_loop_modules`. The reactor inherits
+  `('asyncio', 'selectors')` and names no `winloop`: the loop of Winloop is
+  compiled with Cython and makes no frames of Python, and the callbacks of
+  the reactor run below `_Loop` or the methods of `Pyjo.Reactor.Asyncio`.
+  The Python of the package is the code that `winloop.run` runs, its `run`
+  and `wrapper`, below which is `asyncio/runners.py`, which `asyncio` covers
+  already, and `_noop.noop`, which the loop calls to process the signals, and
+  where a signal handler or the garbage collector may run: between the
+  callbacks of libuv, and below `_Loop` for a loop of its own. A probe of
+  `_finalize` over the suite of Pyjoyment on the reactor found no frame of
+  Winloop below any of its calls (#2).
 - Winloop has wheels for CPython on Windows only, with the free-threaded
   build, not for PyPy, so the matrix of Tests is CPython 3.12 to 3.15 and
   3.15t on `windows-2025`.
@@ -100,7 +115,9 @@ is not released yet would be its Git repository in `[tool.uv.sources]` of
 this one: uv applies the sources of a dependency of Git, so whoever installs
 the reactor from Git would get a subdirectory of this repository that does not
 exist. That is the Pyjoyment of `main` now, for its tests that recognize a
-subclass of `Pyjo.Reactor.Asyncio`, pyjoyment/Pyjoyment#510: before a release
+subclass of `Pyjo.Reactor.Asyncio`, pyjoyment/Pyjoyment#510, and for the
+finalizers deferred below the frames of the reactor, pyjoyment/Pyjoyment#534:
+before a release
 of the reactor, the source goes and the lowest version of `dependencies`
 becomes the release of Pyjoyment that has it, as a wheel carries no sources of
 uv and would install Pyjoyment 0.2.0.
