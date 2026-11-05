@@ -105,6 +105,14 @@ Pyjo-Reactor-Uvloop, whose workflows and linters it shares, and whose
   to it. A socket that one loop watches goes to libuv as before, and the run
   of a loop looks at its sockets only while `_shared` counts sockets that more
   than one loop watches.
+- libuv counts a timer in whole milliseconds from `uv_now`, its clock rounded
+  down, and Winloop rounds the delay to them, as uvloop does, so a timer, as
+  `asyncio.sleep`, was due up to a millisecond before its time by
+  `time.monotonic`, where the loop of asyncio is never early: a sleep of 2 ms
+  took 1.5 ms. `call_later` of `_Loop`, which `call_at` of Winloop calls too,
+  rounds the delay up to a millisecond and adds the one that the clock loses,
+  as `_Loop` of Pyjo.Reactor.Uvloop does, after MagicStack/uvloop#755; a delay
+  of no time stays a `call_soon` of Winloop.
 - `PYJO_ASYNCIO_SLOW_CALLBACK` sets the `slow_callback_duration` of a loop of
   its own, as for `Pyjo.Reactor.Asyncio`, which the loop of Winloop has too.
 - `Pyjo.Reactor._finalize` defers the cleanup of a finalizer that runs below a
@@ -245,8 +253,9 @@ loop of Winloop: a loop of its own, a given loop, a loop that is running, of
 asyncio, a `SelectorEventLoop`, and of Winloop, a coroutine,
 `PYJO_ASYNCIO_SLOW_CALLBACK`, a signal while the loop waits, the finalizer of
 an async generator in the debug mode, a stop in a callback of I/O, the
-writer of a socket whose peer has closed it and a socket that reactors in
-threads watch. The subtests of Uvloop for the
+writer of a socket whose peer has closed it, a socket that reactors in
+threads watch and a timer that is not due before its time. The subtests of
+Uvloop for the
 fork, the wakeup fd of a program and the blocking mode of a pipe are left out,
 as they do not apply on Windows.
 `t/examples.py` stops the server of `examples/hello_world_winloop.py` with

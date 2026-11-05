@@ -70,7 +70,10 @@ Winloop.
 A signal handler of Python runs while a loop of its own waits, as on the
 Ctrl-C or Ctrl-Break that stops a server, but the wakeup fd that a program
 sets with :func:`signal.set_wakeup_fd` is not written to then, as Winloop
-sets one of its own while it runs, in the main thread.
+sets one of its own while it runs, in the main thread. A timer of a loop of
+its own, as :func:`asyncio.sleep`, is never due before its time, as with the
+loop of :mod:`asyncio`, although libuv counts it in whole milliseconds, so it
+may be up to two milliseconds late.
 
 Reactors in threads of a process that watch the same socket, as the workers
 of :mod:`Pyjo.Server.Prethread` watch the listen sockets of the manager, take
@@ -102,6 +105,7 @@ import Pyjo.Reactor.Asyncio
 import asyncio
 import collections
 import importlib.metadata
+import math
 import os
 import threading
 import weakref
@@ -200,6 +204,17 @@ class _Loop(winloop.Loop):
     def _halting(self) -> None:
         self._halt = None
         self._halted = True
+
+    # libuv counts a timer in whole milliseconds from its clock, which it rounds down, and Winloop rounds the delay, so
+    # that a timer, as asyncio.sleep, is due up to a millisecond before its time by time.monotonic, where the loop of
+    # asyncio is never early; the delay is rounded up, with the millisecond that the clock loses, as Pyjo.Reactor.Uvloop
+    # does (MagicStack/uvloop#755). call_at of Winloop calls it too
+    def call_later(
+        self, delay: float, callback: Callable[..., Any], *args: Any, context: Any = None
+    ) -> asyncio.TimerHandle:
+        if 0 < delay < math.inf:
+            delay = (math.ceil(delay * 1000) + 1) / 1000
+        return super().call_later(delay, callback, *args, context=context)
 
     def add_reader(self, fd: Any, callback: Callable[..., Any], *args: Any) -> None:
         self._watch(fd, 1, (callback, args))

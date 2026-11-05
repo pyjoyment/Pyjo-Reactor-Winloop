@@ -672,4 +672,56 @@ with subtest('A socket that reactors in threads watch'):
     ok(not any(thread.is_alive() for thread in threads), 'reactors stopped')
     server.close()
 
+# Not in Mojolicious: libuv counts a timer in whole milliseconds of a clock that it rounds down, so that a timer of
+# Winloop is due up to a millisecond before its time, where the loop of asyncio is never early; by the clock of
+# time.perf_counter, which time.monotonic is on Windows since Python 3.13, and which counted in the ticks of the system
+# of 15.6 ms before
+with subtest('Timer not due before its time'):
+    with Pyjo.Reactor.Winloop.new() as reactor:
+        early = []
+
+        def timers(after, schedule, count=150):
+            # A start anywhere within a millisecond, which a start right after a timer is not
+            deadline = time.perf_counter() + (count % 10) / 10000
+            while time.perf_counter() < deadline:
+                pass
+            start = time.perf_counter()
+
+            def due(*args):
+                if (elapsed := time.perf_counter() - start) < after:
+                    early.append(elapsed)
+                if count > 1:
+                    timers(after, schedule, count - 1)
+                else:
+                    reactor.stop()
+
+            schedule(after, due)
+
+        timers(0.002, lambda after, due: reactor.timer(after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'timer of the reactor')
+        early.clear()
+        timers(0.002, lambda after, due: reactor.loop.call_later(after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'call_later')
+        early.clear()
+        timers(0.002, lambda after, due: reactor.loop.call_at(reactor.loop.time() + after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'call_at')
+        early.clear()
+
+        async def sleeps():
+            for i in range(150):
+                deadline = time.perf_counter() + (i % 10) / 10000
+                while time.perf_counter() < deadline:
+                    pass
+                start = time.perf_counter()
+                await asyncio.sleep(0.002)
+                if (elapsed := time.perf_counter() - start) < 0.002:
+                    early.append(elapsed)
+
+        reactor.run_coroutine(sleeps(), lambda value: reactor.stop(), lambda err: (early.append(err), reactor.stop()))
+        reactor.start()
+        is_deeply_ok(early, [], 'asyncio.sleep')
+
 done_testing()
