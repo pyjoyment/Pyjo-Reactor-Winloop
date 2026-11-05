@@ -624,4 +624,52 @@ with subtest('Writer of a socket whose peer has closed it'):
         reactor.remove(a)
     a.close()
 
+# Not in Mojolicious: libuv of Windows polls a socket with an exclusive request of AFD, which ends the request of another
+# loop for the same socket, which polls it again, in a busy loop; the loops of reactors in threads that watch one socket,
+# as the workers of Pyjo.Server.Prethread watch the listen sockets of the manager, poll it one at a time, in turn
+with subtest('A socket that reactors in threads watch'):
+    server = socket.create_server(('127.0.0.1', 0))
+    server.setblocking(False)
+    port = server.getsockname()[1]
+    accepted = [0, 0, 0, 0]
+    reactors = []
+    ready = threading.Barrier(5)
+
+    def serve(n):
+        with Pyjo.Reactor.Winloop.new() as reactor:
+
+            def accept(reactor, writable):
+                try:
+                    conn, _ = server.accept()
+                except BlockingIOError:
+                    return
+                accepted[n] += 1
+                conn.close()
+
+            reactor.io(server, accept).watch(server, True, False)
+            reactors.append(reactor)
+            reactor.next_tick(lambda reactor: ready.wait())
+            reactor.start()
+            reactor.remove(server)
+
+    threads = [threading.Thread(target=serve, args=(n,)) for n in range(4)]
+    for thread in threads:
+        thread.start()
+    ready.wait()
+    cpu, started = time.process_time(), time.monotonic()
+    time.sleep(1)
+    cpu, elapsed = time.process_time() - cpu, time.monotonic() - started
+    ok(cpu < elapsed / 2, 'idle loops do not poll the socket in a busy loop')
+    for _ in range(40):
+        with socket.create_connection(('127.0.0.1', port)) as client:
+            client.recv(1)
+    is_ok(sum(accepted), 40, 'all connections accepted')
+    ok(all(accepted), 'by every reactor in turn')
+    for reactor in reactors:
+        reactor.loop.call_soon_threadsafe(reactor.stop)
+    for thread in threads:
+        thread.join(10)
+    ok(not any(thread.is_alive() for thread in threads), 'reactors stopped')
+    server.close()
+
 done_testing()

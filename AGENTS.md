@@ -85,6 +85,26 @@ Pyjo-Reactor-Uvloop, whose workflows and linters it shares, and whose
     error lasts, as with the loop of asyncio. It stops watching only on an
     error of the poll itself, as of a socket that is closed, and `select.poll`,
     with which uvloop checks `POLLERR` on Linux, does not exist on Windows.
+- A socket that loops of the process watch, as the workers of
+  `Pyjo.Server.Prethread` watch the listen sockets of the manager on Windows,
+  the same sockets in every thread, is polled by one loop at a time. libuv of
+  Windows submits every poll of AFD with `Exclusive = TRUE`, which ends the
+  poll of the same socket of any other loop, also of a copy of the socket, as
+  AFD is exclusive for the socket and not for its handle; that loop polls it
+  again, and so on, in a busy loop of C with no event at all, which the
+  documentation of libuv warns of: two idle loops took 70-80% of a processor,
+  four took 240%, with or without the GIL, and starved the process, as
+  `t/Pyjo/Server_Prethread.py` of Pyjoyment, and the tests next to it. `_Loop`
+  keeps the readers and the writers of each socket, and a registry of the
+  process, `_SOCKETS`, has the loops that watch it, the owner that libuv polls
+  it for, and the loops that run and wait for it: the owner hands it over to
+  the next one after each of its events, so the connections go to every worker
+  in turn, and at the end of its run, and a loop that starts to run takes it
+  from an owner that does not run. A loop changes the polls of libuv only in
+  its thread, with `call_soon_threadsafe` when another loop hands a socket over
+  to it. A socket that one loop watches goes to libuv as before, and the run
+  of a loop looks at its sockets only while `_shared` counts sockets that more
+  than one loop watches.
 - `PYJO_ASYNCIO_SLOW_CALLBACK` sets the `slow_callback_duration` of a loop of
   its own, as for `Pyjo.Reactor.Asyncio`, which the loop of Winloop has too.
 - `Pyjo.Reactor._finalize` defers the cleanup of a finalizer that runs below a
@@ -224,8 +244,9 @@ mise exec -- uv run --group docs --with-editable ../Pyjoyment sphinx-build -W --
 loop of Winloop: a loop of its own, a given loop, a loop that is running, of
 asyncio, a `SelectorEventLoop`, and of Winloop, a coroutine,
 `PYJO_ASYNCIO_SLOW_CALLBACK`, a signal while the loop waits, the finalizer of
-an async generator in the debug mode, a stop in a callback of I/O and the
-writer of a socket whose peer has closed it. The subtests of Uvloop for the
+an async generator in the debug mode, a stop in a callback of I/O, the
+writer of a socket whose peer has closed it and a socket that reactors in
+threads watch. The subtests of Uvloop for the
 fork, the wakeup fd of a program and the blocking mode of a pipe are left out,
 as they do not apply on Windows.
 `t/examples.py` stops the server of `examples/hello_world_winloop.py` with
