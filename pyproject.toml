@@ -36,7 +36,7 @@ docs = ["sphinx>=9.2.0"]
 docs = { requires-python = ">=3.14" }
 
 # Until the release of Pyjoyment after 0.2.0: its tests that recognize a subclass of Pyjo.Reactor.Asyncio, as this reactor
-# is (pyjoyment/Pyjoyment#510)
+# is (pyjoyment/Pyjoyment#510), and the finalizers deferred below the frames of this reactor (pyjoyment/Pyjoyment#534)
 [tool.uv.sources]
 pyjoyment = { git = "https://github.com/pyjoyment/Pyjoyment", branch = "main" }
 
