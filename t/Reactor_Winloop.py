@@ -624,4 +624,104 @@ with subtest('Writer of a socket whose peer has closed it'):
         reactor.remove(a)
     a.close()
 
+# Not in Mojolicious: libuv of Windows polls a socket with an exclusive request of AFD, which ends the request of another
+# loop for the same socket, which polls it again, in a busy loop; the loops of reactors in threads that watch one socket,
+# as the workers of Pyjo.Server.Prethread watch the listen sockets of the manager, poll it one at a time, in turn
+with subtest('A socket that reactors in threads watch'):
+    server = socket.create_server(('127.0.0.1', 0))
+    server.setblocking(False)
+    port = server.getsockname()[1]
+    accepted = [0, 0, 0, 0]
+    reactors = []
+    ready = threading.Barrier(5)
+
+    def serve(n):
+        with Pyjo.Reactor.Winloop.new() as reactor:
+
+            def accept(reactor, writable):
+                try:
+                    conn, _ = server.accept()
+                except BlockingIOError:
+                    return
+                accepted[n] += 1
+                conn.close()
+
+            reactor.io(server, accept).watch(server, True, False)
+            reactors.append(reactor)
+            reactor.next_tick(lambda reactor: ready.wait())
+            reactor.start()
+            reactor.remove(server)
+
+    threads = [threading.Thread(target=serve, args=(n,)) for n in range(4)]
+    for thread in threads:
+        thread.start()
+    ready.wait()
+    cpu, started = time.process_time(), time.monotonic()
+    time.sleep(1)
+    cpu, elapsed = time.process_time() - cpu, time.monotonic() - started
+    ok(cpu < elapsed / 2, 'idle loops do not poll the socket in a busy loop')
+    for _ in range(40):
+        with socket.create_connection(('127.0.0.1', port)) as client:
+            client.recv(1)
+    is_ok(sum(accepted), 40, 'all connections accepted')
+    ok(all(accepted), 'by every reactor in turn')
+    for reactor in reactors:
+        reactor.loop.call_soon_threadsafe(reactor.stop)
+    for thread in threads:
+        thread.join(10)
+    ok(not any(thread.is_alive() for thread in threads), 'reactors stopped')
+    server.close()
+
+# Not in Mojolicious: libuv counts a timer in whole milliseconds of a clock that it rounds down, so that a timer of
+# Winloop is due up to a millisecond before its time, where the loop of asyncio is never early; by the clock of
+# time.perf_counter, which time.monotonic is on Windows since Python 3.13, and which counted in the ticks of the system
+# of 15.6 ms before
+with subtest('Timer not due before its time'):
+    with Pyjo.Reactor.Winloop.new() as reactor:
+        early = []
+
+        def timers(after, schedule, count=150):
+            # A start anywhere within a millisecond, which a start right after a timer is not
+            deadline = time.perf_counter() + (count % 10) / 10000
+            while time.perf_counter() < deadline:
+                pass
+            start = time.perf_counter()
+
+            def due(*args):
+                if (elapsed := time.perf_counter() - start) < after:
+                    early.append(elapsed)
+                if count > 1:
+                    timers(after, schedule, count - 1)
+                else:
+                    reactor.stop()
+
+            schedule(after, due)
+
+        timers(0.002, lambda after, due: reactor.timer(after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'timer of the reactor')
+        early.clear()
+        timers(0.002, lambda after, due: reactor.loop.call_later(after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'call_later')
+        early.clear()
+        timers(0.002, lambda after, due: reactor.loop.call_at(reactor.loop.time() + after, due))
+        reactor.start()
+        is_deeply_ok(early, [], 'call_at')
+        early.clear()
+
+        async def sleeps():
+            for i in range(150):
+                deadline = time.perf_counter() + (i % 10) / 10000
+                while time.perf_counter() < deadline:
+                    pass
+                start = time.perf_counter()
+                await asyncio.sleep(0.002)
+                if (elapsed := time.perf_counter() - start) < 0.002:
+                    early.append(elapsed)
+
+        reactor.run_coroutine(sleeps(), lambda value: reactor.stop(), lambda err: (early.append(err), reactor.stop()))
+        reactor.start()
+        is_deeply_ok(early, [], 'asyncio.sleep')
+
 done_testing()
