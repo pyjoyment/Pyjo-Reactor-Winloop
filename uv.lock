@@ -372,7 +372,7 @@ docs = [{ name = "sphinx", marker = "python_full_version >= '3.14'", specifier =
 [[package]]
 name = "pyjoyment"
 version = "0.2.1.dev1"
-source = { git = "https://github.com/pyjoyment/Pyjoyment?branch=main#7b09754b6f32954ce4cf4ffa8bcd4143f54dfcf6" }
+source = { git = "https://github.com/pyjoyment/Pyjoyment?branch=main#c4bf9a48bbf64cd19db65737eb478c9401c8a51f" }
 
 [[package]]
 name = "requests"
