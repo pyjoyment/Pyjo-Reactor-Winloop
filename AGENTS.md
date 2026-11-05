@@ -155,7 +155,6 @@ Winloop is installed on Windows only, `sys_platform == 'win32'` of
 and CI runs them on `windows-2025`; on Linux and macOS, where Trunk and Read
 the Docs run, the environment has no Winloop.
 
-
 ```sh
 mise exec -- uv sync
 mise exec -- uv run --with-editable ../Pyjoyment python -m Pyjo.Prove -l -r t
