@@ -298,5 +298,5 @@ for an approval and takes `main` and tags only. The trusted publisher of PyPI
 names `pypi.yaml` and that environment.
 
 ```sh
-gh attestation verify pyjo_reactor_winloop-0.2.0.tar.gz -R pyjoyment/Pyjo-Reactor-Winloop
+gh attestation verify pyjo_reactor_winloop-0.1.0.tar.gz -R pyjoyment/Pyjo-Reactor-Winloop
 ```

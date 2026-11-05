@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "Pyjo-Reactor-Winloop"
-version = "0.2.0.dev1"
+version = "0.1.0.dev1"
 description = "Low level event reactor with Winloop support for Pyjoyment."
 readme = "README.md"
 license = "Artistic-2.0"
