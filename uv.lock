@@ -345,7 +345,7 @@ wheels = [
 
 [[package]]
 name = "pyjo-reactor-winloop"
-version = "0.1.0.dev1"
+version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyjoyment" },
