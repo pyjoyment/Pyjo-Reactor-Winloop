@@ -1,4 +1,4 @@
-[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-Pyjoyment-02a7a0)](https://github.com/pyjoyment/Pyjoyment)
+[![Home](https://img.shields.io/badge/%F0%9F%8F%A0-Pyjoyment-02a7a0)](https://pyjoyment.dev/)
 [![GitHub](https://img.shields.io/github/stars/pyjoyment/Pyjo-Reactor-Winloop?style=flat&label=GitHub%20%E2%AD%90&logo=github)](https://github.com/pyjoyment/Pyjo-Reactor-Winloop)
 [![Documentation](https://img.shields.io/badge/docs-Read_the_Docs-blue?logo=readthedocs&logoColor=white)](https://pyjoyment.readthedocs.io/projects/pyjo-reactor-winloop/en/stable/)
 [![License](https://img.shields.io/github/license/pyjoyment/Pyjo-Reactor-Winloop.svg)](https://github.com/pyjoyment/Pyjo-Reactor-Winloop/blob/main/LICENSE)
@@ -16,7 +16,7 @@
 </p>
 
 Low level event reactor with [Winloop](https://github.com/Vizonex/Winloop)
-support for [Pyjoyment](https://github.com/pyjoyment/Pyjoyment).
+support for [Pyjoyment](https://pyjoyment.dev/).
 
 `Pyjo.Reactor.Winloop` is `Pyjo.Reactor.Asyncio` with an event loop of its
 own of Winloop, the fork of uvloop for Windows, so that the servers of
