@@ -93,7 +93,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.3.3
         with:
-          version: 0.13.7 # datasource=github-releases depName=astral-sh/uv
+          version: 0.13.8 # datasource=github-releases depName=astral-sh/uv
 
       # The interpreter of setup-python by its path of Windows, as the one of Git
       # Bash, from command -v, is a path of MSYS without .exe
